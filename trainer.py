@@ -17,7 +17,7 @@ isPrintGeneralStat = True
 # To Print PFS statistics
 isPrintPFSStat = False
 # To Print Any ChiSq test
-isPrintChiSq = True
+isPrintChiSq = False
 
 # Load the train data into pandas dataframe
 filename = my_data_folder + "/" + my_data_filename
@@ -89,6 +89,11 @@ if isPrintChiSq:
 hormon = [[rows_pfs0[0] + rows_pfs0[2], rows_pfs1[0] + rows_pfs1[2]], [rows_pfs0[1] + rows_pfs0[3], rows_pfs1[1] + rows_pfs1[3]]]
 if isPrintChiSq:
 	PrintChiSq(hormon, "Hormontherapy", "pfs", "horm")
+
+# Check file status
+
+if os.path.exists(my_data_folder + '/' + statistics_filename):
+  os.remove(my_data_folder + '/' + statistics_filename)
 
 #
 # Testing Grading and PFS Chemotherapy / Hormontherapy relation and significance
