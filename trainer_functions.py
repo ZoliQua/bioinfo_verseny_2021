@@ -9,7 +9,6 @@ import pandas as pd
 import os.path
 from os import path
 from scipy.stats import chi2_contingency
-from statistics import stdev
 
 from trainer_variables import *
 

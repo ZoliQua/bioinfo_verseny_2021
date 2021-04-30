@@ -17,7 +17,7 @@ isPrintGeneralStat = True
 # To Print PFS statistics
 isPrintPFSStat = False
 # To Print Any ChiSq test
-isPrintChiSq = False
+isPrintChiSq = True
 
 # Load the train data into pandas dataframe
 filename = my_data_folder + "/" + my_data_filename
