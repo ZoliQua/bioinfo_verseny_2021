@@ -8,6 +8,8 @@
 import pandas as pd
 import os.path
 from os import path
+import time
+from datetime import datetime
 from scipy.stats import chi2_contingency
 
 from trainer_variables import *
@@ -15,6 +17,24 @@ from trainer_variables import *
 ###########################
 ######### FUNCTIONS #######
 ###########################
+
+
+def TimeNow(str_now, name_of_script, start_time=False):
+	now = datetime.now()
+	time_abb = now.strftime("%Y-%m-%d - %H:%M:%S (%f)")
+	print(f"Runtime of '{name_of_script}' is at {str_now} phase at {time_abb}")
+
+	if str_now == "end":
+		runtime = time.time() - start_time
+		hours = runtime // 3600
+		temp = runtime - 3600 * hours
+		minutes = temp // 60
+		seconds = temp - 60 * minutes
+
+		print(f"Runtime of '{name_of_script}' was", '%d hours %d minutes %d seconds' % (hours, minutes, seconds),
+			  "(" + str(float("{:.5f}".format(runtime))) + ")")
+
+	return True
 
 
 def PrintChiSq(test_array, name, col_name, row_name):
@@ -52,9 +72,29 @@ def ChiSqTest(retrieve_chi2):
 		return p
 	else:
 		return 100
+	
+	
+def SliceBySimpleConditon(incoming_filtered_dict, conditions_array, base_conditions_array):
+	
+	for column_name in conditions_array:
+	
+		for this_status in conditions_array[column_name]:
+			
+			filtered = {}
+
+			for filtered_dict in incoming_filtered_dict.items():
+				filtered[filtered_dict[0]] = {}
+				for this_df in filtered_dict[1].items():
+					filtered[filtered_dict[0]][this_df[0]] = this_df[1][this_df[1][column_name] == this_status]
+		
+			for cond_array in base_conditions_array:
+				# Test main condition in line with base_conditions_array (like grade, or stage)
+				GeneralSlicer(filtered, cond_array, {"col_name": column_name, "cond_value": this_status})
+				
+	return True
 
 
-def GeneralSlicer(incoming_filtered_dict, conditions, sub_conditions, call_type="simple", write_mode="a"):
+def GeneralSlicer(incoming_filtered_dict_radio, conditions, sub_conditions, call_type="simple", write_mode="a"):
 
 	global my_data_folder
 	global statistics_filename
@@ -71,107 +111,143 @@ def GeneralSlicer(incoming_filtered_dict, conditions, sub_conditions, call_type=
 	# Check the existence status of export file
 	isExportFileExist = path.exists(filename)
 
-	for this_df in incoming_filtered_dict.items():
+	for incoming_filtered_dict in incoming_filtered_dict_radio.items():
 
-		for col_name in conditions:
+		for this_df in incoming_filtered_dict[1].items():
 
-			filtered_dict[col_name] = {}
-			collecing_dict = {}
+			for col_name in conditions:
 
-			for condition_value in conditions[col_name]:
+				filtered_dict[col_name] = {}
+				collecing_dict = {}
 
-				if type(condition_value) == list:
+				for condition_value in conditions[col_name]:
 
-					condition_list = condition_value
-					condition_value = "_".join(condition_list)
+					if type(condition_value) == list:
 
-					filtered_dict[col_name][condition_value] = {}
+						condition_list = condition_value
+						condition_value = "_".join(condition_list)
 
-					connecting_subset_dfs = []
+						filtered_dict[col_name][condition_value] = {}
 
-					for this_cond_val in condition_list:
-						connecting_subset_dfs.append(this_df[1].loc[this_df[1][col_name] == this_cond_val])
+						connecting_subset_dfs = []
 
-					filtered_dict[col_name][condition_value]["base"] = pd.concat(connecting_subset_dfs)
+						if condition_value == "1_2_3":
+							for this_cond_val in condition_list:
+								connecting_subset_dfs.append(this_df[1].loc[this_df[1][col_name] == int(this_cond_val)])
+						else:
+							for this_cond_val in condition_list:
+								connecting_subset_dfs.append(this_df[1].loc[this_df[1][col_name] == this_cond_val])
 
-					# filtered_dict[col_name][condition_value]["base"] = this_df[1][
-					#	this_df[1][col_name].str.contains(condition_value, case=False, na=False)]
-					#	this_df[1][col_name].str.find(condition_value) != -1]
+						filtered_dict[col_name][condition_value]["base"] = pd.concat(connecting_subset_dfs)
 
-				else:
-					filtered_dict[col_name][condition_value] = {}
-					filtered_dict[col_name][condition_value]["base"] = this_df[1].loc[
-						this_df[1][col_name] == condition_value]
+						# filtered_dict[col_name][condition_value]["base"] = this_df[1][
+						#	this_df[1][col_name].str.contains(condition_value, case=False, na=False)]
+						#	this_df[1][col_name].str.find(condition_value) != -1]
 
-				filtered_dict[col_name][condition_value]["pfs_0"] = \
-					filtered_dict[col_name][condition_value]["base"].loc[
-						filtered_dict[col_name][condition_value]["base"]['PFS_event'] == 0]
+					else:
+						filtered_dict[col_name][condition_value] = {}
+						filtered_dict[col_name][condition_value]["base"] = this_df[1].loc[
+							this_df[1][col_name] == condition_value]
 
-				filtered_dict[col_name][condition_value]["pfs_1"] = \
-					filtered_dict[col_name][condition_value]["base"].loc[
-						filtered_dict[col_name][condition_value]["base"]['PFS_event'] == 1]
+					# Filters lines with value of PFS = 0
+					filtered_dict[col_name][condition_value]["pfs_0"] = \
+						filtered_dict[col_name][condition_value]["base"].loc[
+							filtered_dict[col_name][condition_value]["base"]['PFS_event'] == 0]
+					# Filters lines with value of PFS = 1
+					filtered_dict[col_name][condition_value]["pfs_1"] = \
+						filtered_dict[col_name][condition_value]["base"].loc[
+							filtered_dict[col_name][condition_value]["base"]['PFS_event'] == 1]
+					# Filters lines with value of OS = 0
+					filtered_dict[col_name][condition_value]["os_0"] = \
+						filtered_dict[col_name][condition_value]["base"].loc[
+							filtered_dict[col_name][condition_value]["base"]['OS_event'] == 0]
+					# Filters lines with value of OS = 1
+					filtered_dict[col_name][condition_value]["os_1"] = \
+						filtered_dict[col_name][condition_value]["base"].loc[
+							filtered_dict[col_name][condition_value]["base"]['OS_event'] == 1]
+					# Filters lines with value of DSS = 0
+					filtered_dict[col_name][condition_value]["dss_0"] = \
+						filtered_dict[col_name][condition_value]["base"].loc[
+							filtered_dict[col_name][condition_value]["base"]['DSS_event'] == 0]
+					# Filters lines with value of DSS = 1
+					filtered_dict[col_name][condition_value]["dss_1"] = \
+						filtered_dict[col_name][condition_value]["base"].loc[
+							filtered_dict[col_name][condition_value]["base"]['DSS_event'] == 1]
 
-				filtered_dict[col_name][condition_value]["dss_0"] = \
-					filtered_dict[col_name][condition_value]["base"].loc[
-						filtered_dict[col_name][condition_value]["base"]['DSS_event'] == 0]
+					pfs_col_name = this_df[0] + "_" + col_name + "_PFS"
+					os_col_name = this_df[0] + "_" + col_name + "_OS"
+					dds_col_name = this_df[0] + "_" + col_name + "_DDS"
 
-				filtered_dict[col_name][condition_value]["dss_1"] = \
-					filtered_dict[col_name][condition_value]["base"].loc[
-						filtered_dict[col_name][condition_value]["base"]['DSS_event'] == 1]
+					# Determine PFS % = PFS_1 / (PFS_1 + PFS_0)
+					if len(filtered_dict[col_name][condition_value]["pfs_1"].index) > 0 and len(
+							filtered_dict[col_name][condition_value]["pfs_0"].index) > 0:
+						collecing_dict[pfs_col_name] = (len(
+							filtered_dict[col_name][condition_value]["pfs_1"].index) * 100) / (
+															   len(filtered_dict[col_name][condition_value][
+																	   "pfs_0"].index) + len(
+														   filtered_dict[col_name][condition_value]["pfs_1"].index))
+					else:
+						collecing_dict[pfs_col_name] = float("NaN")
 
-				pfs_col_name = this_df[0] + "_" + col_name + "_PFS"
-				dds_col_name = this_df[0] + "_" + col_name + "_DDS"
+					# Determine DSS % = DSS_1 / (DSS_1 + DSS_0)
+					if len(filtered_dict[col_name][condition_value]["dss_1"].index) > 0 and len(
+							filtered_dict[col_name][condition_value]["dss_0"].index) > 0:
+						collecing_dict[dds_col_name] = (len(
+							filtered_dict[col_name][condition_value]["dss_1"].index) * 100) / (
+															   len(filtered_dict[col_name][condition_value][
+																	   "dss_0"].index) + len(
+														   filtered_dict[col_name][condition_value]["dss_1"].index))
+					else:
+						collecing_dict[dds_col_name] = float("NaN")
 
-				# Determine PFS % = PFS_1 / (PFS_1 + PFS_0)
-				if len(filtered_dict[col_name][condition_value]["pfs_1"].index) > 0 and len(
-						filtered_dict[col_name][condition_value]["pfs_0"].index) > 0:
-					collecing_dict[pfs_col_name] = (len(
-						filtered_dict[col_name][condition_value]["pfs_1"].index) * 100) / (
-														   len(filtered_dict[col_name][condition_value][
-																   "pfs_0"].index) + len(
-													   filtered_dict[col_name][condition_value]["pfs_1"].index))
-				else:
-					collecing_dict[pfs_col_name] = float("NaN")
+					# Determine OS % = OS_1 / (OS_1 + OS_0)
+					if len(filtered_dict[col_name][condition_value]["os_1"].index) > 0 and len(
+							filtered_dict[col_name][condition_value]["os_0"].index) > 0:
+						collecing_dict[os_col_name] = (len(
+							filtered_dict[col_name][condition_value]["os_1"].index) * 100) / (
+															   len(filtered_dict[col_name][condition_value][
+																	   "os_0"].index) + len(
+														   filtered_dict[col_name][condition_value]["os_1"].index))
+					else:
+						collecing_dict[os_col_name] = float("NaN")
 
-				# Determine DSS % = DSS_1 / (DSS_1 + DSS_0)
-				if len(filtered_dict[col_name][condition_value]["dss_1"].index) > 0 and len(
-						filtered_dict[col_name][condition_value]["dss_0"].index) > 0:
-					collecing_dict[dds_col_name] = (len(
-						filtered_dict[col_name][condition_value]["dss_1"].index) * 100) / (
-														   len(filtered_dict[col_name][condition_value][
-																   "dss_0"].index) + len(
-													   filtered_dict[col_name][condition_value]["dss_1"].index))
-				else:
-					collecing_dict[dds_col_name] = float("NaN")
+					# Create this row from elements, 13 indexes
+					this_row = [
+						this_df[0],
+						incoming_filtered_dict[0][-1],
+						col_name,
+						condition_value,
+						sub_conditions["col_name"],
+						sub_conditions["cond_value"],
+						len(filtered_dict[col_name][condition_value]["pfs_0"].index),
+						'{:.2f}'.format(filtered_dict[col_name][condition_value]["pfs_0"]['PFS_time_months'].mean()),
+						'{:.2f}'.format(filtered_dict[col_name][condition_value]["pfs_0"]['PFS_time_months'].std()),
+						len(filtered_dict[col_name][condition_value]["pfs_1"].index),
+						'{:.2f}'.format(filtered_dict[col_name][condition_value]["pfs_1"]['PFS_time_months'].mean()),
+						'{:.2f}'.format(filtered_dict[col_name][condition_value]["pfs_1"]['PFS_time_months'].std()),
+						'{:.2f}'.format(collecing_dict[pfs_col_name] if collecing_dict[pfs_col_name] != "NaN" else 0),
+						len(filtered_dict[col_name][condition_value]["os_0"].index),
+						'{:.2f}'.format(filtered_dict[col_name][condition_value]["os_0"]['OS_time_months'].mean()),
+						'{:.2f}'.format(filtered_dict[col_name][condition_value]["os_0"]['OS_time_months'].std()),
+						len(filtered_dict[col_name][condition_value]["os_1"].index),
+						'{:.2f}'.format(filtered_dict[col_name][condition_value]["os_1"]['OS_time_months'].mean()),
+						'{:.2f}'.format(filtered_dict[col_name][condition_value]["os_1"]['OS_time_months'].std()),
+						'{:.2f}'.format(collecing_dict[os_col_name] if collecing_dict[os_col_name] != "NaN" else 0),
+						len(filtered_dict[col_name][condition_value]["dss_0"].index),
+						'{:.2f}'.format(filtered_dict[col_name][condition_value]["dss_0"]['PFS_time_months'].mean()),
+						'{:.2f}'.format(filtered_dict[col_name][condition_value]["dss_0"]['PFS_time_months'].std()),
+						len(filtered_dict[col_name][condition_value]["dss_1"].index),
+						'{:.2f}'.format(filtered_dict[col_name][condition_value]["dss_1"]['PFS_time_months'].mean()),
+						'{:.2f}'.format(filtered_dict[col_name][condition_value]["dss_1"]['PFS_time_months'].std()),
+						'{:.2f}'.format(collecing_dict[dds_col_name] if collecing_dict[dds_col_name] != "NaN" else 0)]
 
-				# Create this row from elements, 13 indexes
-				this_row = [
-					this_df[0],
-					col_name,
-					condition_value,
-					sub_conditions["col_name"],
-					sub_conditions["cond_value"],
-					len(filtered_dict[col_name][condition_value]["pfs_0"].index),
-					'{:.2f}'.format(filtered_dict[col_name][condition_value]["pfs_0"]['PFS_time_months'].mean()),
-					'{:.2f}'.format(filtered_dict[col_name][condition_value]["pfs_0"]['PFS_time_months'].std()),
-					len(filtered_dict[col_name][condition_value]["pfs_1"].index),
-					'{:.2f}'.format(filtered_dict[col_name][condition_value]["pfs_1"]['PFS_time_months'].mean()),
-					'{:.2f}'.format(filtered_dict[col_name][condition_value]["pfs_1"]['PFS_time_months'].std()),
-					'{:.2f}'.format(collecing_dict[pfs_col_name] if collecing_dict[pfs_col_name] != "NaN" else 0),
-					len(filtered_dict[col_name][condition_value]["dss_0"].index),
-					'{:.2f}'.format(filtered_dict[col_name][condition_value]["dss_0"]['PFS_time_months'].mean()),
-					'{:.2f}'.format(filtered_dict[col_name][condition_value]["dss_0"]['PFS_time_months'].std()),
-					len(filtered_dict[col_name][condition_value]["dss_1"].index),
-					'{:.2f}'.format(filtered_dict[col_name][condition_value]["dss_1"]['PFS_time_months'].mean()),
-					'{:.2f}'.format(filtered_dict[col_name][condition_value]["dss_1"]['PFS_time_months'].std()),
-					'{:.2f}'.format(collecing_dict[dds_col_name] if collecing_dict[dds_col_name] != "NaN" else 0)]
-
-				collecting_array.append(this_row)
+					collecting_array.append(this_row)
 
 	export_df = pd.DataFrame(data=collecting_array)
-	export_df.columns = ["type", "main_condition", "condition_value", "sub_condition", "sub_condition_value", "pfs_0", "pfs_0_months_mean", "pfs_0_months_std", "pfs_1", "pfs_1_months_mean",
-						 "pfs_1_months_std", "pfs_1_perc", "dss_0", "dss_0_months_mean", "dss_0_months_std", "dss_1", "dss_1_months_mean",
-						 "dss_1_months_std", "dss_1_perc"]
+	export_df.columns = ["type", "radiotherapy", "main_condition", "condition_value", "sub_condition", "sub_condition_value", "pfs_0", "pfs_0_months_mean", "pfs_0_months_std", "pfs_1", "pfs_1_months_mean",
+						 "pfs_1_months_std", "pfs_1_perc", "os_0", "os_0_months_mean", "os_0_months_std", "os_1", "os_1_months_mean",
+						 "os_1_months_std", "os_1_perc", "dss_0", "dss_0_PFS_months_mean", "dss_0_PFS_months_std", "dss_1", "dss_1_PFS_months_mean",
+						 "dss_1_PFS_months_std", "dss_1_perc"]
 
 	add_new_column_1 = []
 	add_new_column_1b = []
@@ -384,10 +460,11 @@ def GeneralSlicer(incoming_filtered_dict, conditions, sub_conditions, call_type=
 	filtered_export_df = export_df[
 		(export_df["proportion_val_1_pfs"] < 0.9) & (export_df["proportion_val_1_pfs_chi2_p"] < 0.05)]
 
-	if len(filtered_export_df) > 0:
-		for row in export_df.iterrows():
-			this_row = []
-			this_value = 0
+
+	for row in export_df.iterrows():
+		this_row = []
+		this_value = 0
+		if len(filtered_export_df) > 0:
 			if row[1]["proportion_val_1_pfs"] < 0.9 and row[1]["proportion_val_1_pfs_chi2_p"] < 0.05:
 				this_row.append("PFS (p<0.05)")
 				this_value = 1
@@ -401,12 +478,14 @@ def GeneralSlicer(incoming_filtered_dict, conditions, sub_conditions, call_type=
 				this_row.append("DDS (p<0.05)")
 				this_value = 1
 			this_row_str = ", ".join(this_row)
+		else:
+			this_row_str = float("NaN")
 
-			add_new_column_5.append(this_row_str)
-			add_new_column_6.append(this_value)
+		add_new_column_5.append(this_row_str)
+		add_new_column_6.append(this_value)
 
-		export_df["significance_level"] = add_new_column_5
-		export_df["significance"] = add_new_column_6
+	export_df["significance_level"] = add_new_column_5
+	export_df["significance"] = add_new_column_6
 
 	# Write export file inta a csv file using pandas export "to_csv" function
 	if not isExportFileExist:

@@ -8,6 +8,10 @@
 from trainer_functions import *
 from trainer_variables import *
 
+# Print start time to the console
+start_time = time.time()
+TimeNow("start", "classifier.py")
+
 # Set filenames
 filename = my_data_folder + "/" + my_data_filename
 filename_ch0_ho1 = my_data_folder + "/" + export_filename_ch0_ho1
@@ -28,6 +32,9 @@ for iter_item in stat_significant.iterrows():
 	this_row = {}
 	this_row["index"] = iter_item[0]
 
+	if iter_item[1]["radiotherapy"] != "x":
+		this_row["radiation_therapy"] = [iter_item[1]["radiotherapy"]]
+
 	if iter_item[1]["type"][0:5] == "chemo":
 		this_row["adjuvant_chemotherapy"] = [1]
 	elif iter_item[1]["type"][0:5] == "hormo":
@@ -47,8 +54,11 @@ for iter_item in stat_significant.iterrows():
 	this_row[iter_item[1]["main_condition"]] = sub_items
 
 	if type(iter_item[1]["sub_condition"]) == str:
-		sub_items = iter_item[1]["sub_condition_value"].split("_")
-		this_row[iter_item[1]["sub_condition"]] = [int(sub_items[1]), int(sub_items[2])]
+		if iter_item[1]["sub_condition_value"].count("_") > 0:
+			sub_items = iter_item[1]["sub_condition_value"].split("_")
+			this_row[iter_item[1]["sub_condition"]] = [int(sub_items[1]), int(sub_items[2])]
+		else:
+			this_row[iter_item[1]["sub_condition"]] = [iter_item[1]["sub_condition_value"]]
 
 	positive_list.append(this_row)
 
@@ -60,6 +70,11 @@ new_column_1 = []
 new_column_2 = []
 new_column_3 = []
 new_column_4 = []
+new_column_5a = []
+new_column_5b = []
+new_column_6 = []
+
+source_data.fillna("NA")
 
 # Iterate data and check if the data row is satisfies any of the positvie list conditions
 for iter_item in source_data.iterrows():
@@ -103,35 +118,83 @@ for iter_item in source_data.iterrows():
 				list_of_sign.append(iter_item[0])
 
 			if not_satisfied_conditions == 0:
-				satisfied_indexes.append(condition)
+				satisfied_indexes.append(condition["index"])
 
 		# if iter_item[0] in list_of_sign:
 		# 	break
+
+	years_05 = False
+	years_10 = False
+
+	if iter_item[1]["OS_time_months"] >= 60:
+		new_column_5a.append(1)
+		years_05 = True
+		if iter_item[1]["OS_time_months"] >= 120:
+			new_column_5b.append(1)
+			years_10 = True
+		else:
+			new_column_5b.append(0)
+	else:
+		new_column_5a.append(0)
+		new_column_5b.append(0)
+
+	this_class = []
+
+	if iter_item[1]["hormone_therapy"] == float('0'):
+		this_class.append("NOT_hormon")
+	if iter_item[1]["hormone_therapy"] == float('1'):
+		this_class.append("hormon")
+	if iter_item[1]["adjuvant_chemotherapy"] == float('0'):
+		this_class.append("NOT_chemo")
+	if iter_item[1]["adjuvant_chemotherapy"] == float('1'):
+		this_class.append("chemo")
+
+	if years_10:
+		this_class.append("with_05_years_OS")
+	elif years_05:
+		this_class.append("with_10_years_OS")
+
 
 	if iter_item[0] in list_of_sign:
 		new_column_1.append(1)
 		new_column_2.append(satisfied_indexes)
 		new_column_3.append(chemo)
 		new_column_4.append(hormon)
+		if iter_item[1]["PFS_event"] == 0:
+			this_class.insert(0, "significantly_effective_not_progressing")
+		else:
+			this_class.insert(0, "significantly_effective_progressing")
+
+		new_column_6.append(", ".join(this_class))
 
 	else:
 		new_column_1.append(0)
 		new_column_2.append(0)
 		new_column_3.append(0)
 		new_column_4.append(0)
+		if len(this_class) > 0:
+			new_column_6.append(", ".join(this_class))
+		else:
+			new_column_6.append("NOT_Classified")
 
 # Print the number of significant patients
-print(f"Classifier have found {len(list_of_sign)} significantly effectively treated patients out of {len(source_data)}.")
+print(f"Classifier have found {len(list_of_sign)} ({'{:.2%}'.format((len(list_of_sign)/len(source_data)))}) significantly effectively treated patients out of {len(source_data)}.")
 
 # Adding significance indicating columns to the export file
 source_data["significance"] = new_column_1
 source_data["significance_reason"] = new_column_2
-source_data["adjuvant_chemotherapy_sign"] = new_column_3
-source_data["hormone_therapy_sign"] = new_column_4
+source_data["significance_adjuvant_chemotherapy"] = new_column_3
+source_data["significance_hormone_therapy"] = new_column_4
+source_data["os_survival_05"] = new_column_5a
+source_data["os_survival_10"] = new_column_5b
+source_data["classification"] = new_column_6
 
-source_data_ch1_ho0 = source_data[(source_data["adjuvant_chemotherapy_sign"] == 1) & (source_data["hormone_therapy_sign"] == 0)]
-source_data_ch0_ho1 = source_data[(source_data["adjuvant_chemotherapy_sign"] == 0) & (source_data["hormone_therapy_sign"] == 1)]
-source_data_ch1_ho1 = source_data[(source_data["adjuvant_chemotherapy_sign"] == 1) & (source_data["hormone_therapy_sign"] == 1)]
+classic = source_data.groupby(["classification"] ).size()
+print(classic)
+
+source_data_ch1_ho0 = source_data[(source_data["significance_adjuvant_chemotherapy"] == 1) & (source_data["significance_hormone_therapy"] == 0)]
+source_data_ch0_ho1 = source_data[(source_data["significance_adjuvant_chemotherapy"] == 0) & (source_data["significance_hormone_therapy"] == 1)]
+source_data_ch1_ho1 = source_data[(source_data["significance_adjuvant_chemotherapy"] == 1) & (source_data["significance_hormone_therapy"] == 1)]
 
 # Export results into a csv file
 source_data.to_csv(filename_export, index=False)
@@ -148,3 +211,5 @@ print(f"Classifier exported it into {filename_ch0_ho1}.")
 print(f"Classifier have found {len(source_data_ch1_ho1)} where both therapies were significantly effective.")
 print(f"Classifier exported it into {filename_ch1_ho1}.")
 
+# Print end time to the console
+TimeNow("end", "classifier.py", start_time)
